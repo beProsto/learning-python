@@ -1,6 +1,7 @@
 import os
 import time
 import threading
+import random
 
 # getch() function will simply ask the user for single key input
 # without the need to press enter
@@ -42,14 +43,14 @@ else:
 	def clear_screen():
 		os.system('clear')
 
-
 # We don't actually have to instatiate an object
 # this class will contain our global variables
 class Global:
-	width = 30
+	width = 20
 	height = 10
 	key = ""
 	running = True
+	lost = False
 
 # Will represent positional data
 class Vec2:
@@ -62,6 +63,57 @@ class Vec2:
 		self.x += other.x
 		self.y += other.y
 
+# This will be the screen we will draw each frame 
+class Screen:
+	display = []
+	clear_cell = "."
+
+	def __init__(self):
+		for y in range(Global.height):
+			for x in range(Global.width):
+				self.display.append(self.clear_cell)
+	
+	def draw(self, x, y, c):
+		if x >= 0 and x < Global.width and y >= 0 and y < Global.height:
+			self.display[int(y * Global.width + x)] = c
+	
+	def clear(self, x, y):
+		if x >= 0 and x < Global.width and y >= 0 and y < Global.height:
+			self.display[int(y * Global.width + x)] = self.clear_cell
+	
+	def get(self, x, y):
+		if x >= 0 and x < Global.width and y >= 0 and y < Global.height:
+			return self.display[int(y * Global.width + x)]
+		else:
+			return self.clear_cell
+	
+	def isClear(self, x, y):
+		if x >= 0 and x < Global.width and y >= 0 and y < Global.height and self.display[int(y * Global.width + x)] != self.clear_cell:
+			return False
+		else:
+			return True
+
+
+screen = Screen()
+
+# This will be the food for our snake
+class Food:
+	pos = Vec2(8, 2)
+
+	def __init__(self):
+		screen.draw(self.pos.x, self.pos.y, "@")
+
+	def reposition(self):
+		while True:
+			x = random.randint(0, Global.width-1)
+			y = random.randint(0, Global.height-1)
+			if screen.isClear(x, y):
+				self.pos = Vec2(x, y)
+				screen.draw(self.pos.x, self.pos.y, "@")
+				return
+
+food = Food()
+
 # Will be our actual snake
 class Snake:
 	parts = []
@@ -72,6 +124,7 @@ class Snake:
 		# creates the first element, the head
 		self.parts.append(Vec2(Global.width / 2, Global.height / 2))
 		self.length = 1
+		screen.draw(self.parts[0].x, self.parts[0].y, "Y")
 	
 	# called every frame
 	def update(self):
@@ -83,15 +136,29 @@ class Snake:
 			self.direction = Vec2(0, -1)
 		elif Global.key == "s":
 			self.direction = Vec2(0, 1)
-		elif Global.key == "e":
-			self.eat()
+		# elif Global.key == "e":
+		# 	self.eat()
+		
+		screen.clear(self.parts[0].x, self.parts[0].y)
+		screen.clear(self.parts[self.length-1].x, self.parts[self.length-1].y)
 		
 		for i in range(self.length-1, 0, -1):
 			self.parts[i].x = self.parts[i-1].x
 			self.parts[i].y = self.parts[i-1].y
+			screen.draw(self.parts[i].x, self.parts[i].y, "O")
+			if i != 1 and self.parts[0].x == self.parts[i].x and self.parts[0].y == self.parts[i].y:
+				Global.lost = True
+				return
 		
 		self.parts[0].add(self.direction)
+		screen.draw(self.parts[0].x, self.parts[0].y, "Y")
 
+		if self.parts[0].x >= Global.width or self.parts[0].x < 0 or self.parts[0].y >= Global.height or self.parts[0].y < 0:
+			Global.lost = True
+		
+		if self.parts[0].x == food.pos.x and self.parts[0].y == food.pos.y:
+			food.reposition()
+			self.eat()
 	
 	# called when the snake eats something yummy
 	def eat(self):
@@ -115,12 +182,7 @@ snake = Snake()
 
 # this is an example of a shader function
 def main_shader(x, y):
-	if x == snake.parts[0].x and y == snake.parts[0].y:
-		return "Y"
-	for i in range(snake.length-1, 0, -1):
-		if x == snake.parts[i].x and y == snake.parts[i].y:
-			return "O"
-	return "."
+	return screen.display[y * Global.width + x]
 
 # neat looking loading screen!
 for x in range(1, 31):
@@ -134,8 +196,8 @@ for x in range(1, 31):
 # A title screen that lets the user get read for action :D 
 clear_screen()
 draw_screen(Global.width, Global.height, main_shader)
-print("------------ SNAKE -----------")
-print("> Press W, S, A or D to begin! <\n(Press 'Q' to exit.)")
+print("-" * int((Global.width-7)/2) + "- SNAKE " + "-" * int((Global.width-7)/2))
+print("> Press W, S, A or D to begin! <\n(Press Q to exit.)")
 Global.key = getch()
 if Global.key == "q":
 	exit()
@@ -149,6 +211,9 @@ def gameLoop(arg):
 		clear_screen()
 		draw_screen(Global.width, Global.height, main_shader)
 		time.sleep(0.4)
+		if Global.lost:
+			print("You've Lost! Press Q to quit!")
+			Global.running = False
 
 # Creating a thread 
 gameLoopThread = threading.Thread(target=gameLoop, args=(1,))
